@@ -1,0 +1,40 @@
+name: Apply InTorrent Prewarm Patch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to apply the patch to'
+        required: true
+        default: 'main'
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout the repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0 # Fetches all history so git apply works correctly
+
+      # 2. Check if the patch file exists before running the command
+      - name: Verify Patch File
+        run: |
+          if [ ! -f "intorrent-prewarm.patch" ]; then
+            echo "❌ Error: intorrent-prewarm.patch not found in the root directory!"
+            exit 1
+          fi
+          echo "✅ Patch file found."
+
+      # 3. Apply the patch to the root directory
+      - name: Apply Git Patch
+        run: |
+          git apply intorrent-prewarm.patch
+          echo "✅ Patch applied successfully!"
+
+      # 4. Optional: Check Git status to see modified files
+      - name: Show Modified Files
+        run: git status
