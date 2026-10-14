@@ -1,0 +1,43 @@
+--- a/native/src/intorrent.cpp
++++ b/native/src/intorrent.cpp
+@@ -209,6 +209,13 @@
+         // unchoke us more readily when we reciprocate a little.
+         settings.set_int(lt::settings_pack::upload_rate_limit, 256 * 1024);
+ 
++        // Metadata pre-warm (see intorrent_add_magnet): a couple of torrents
++        // may sit in upload_mode fetching metadata while the real one
++        // streams. The defaults (3 active downloads) would let them queue
++        // the streaming torrent behind them.
++        settings.set_int(lt::settings_pack::active_downloads, 8);
++        settings.set_int(lt::settings_pack::active_limit, 16);
++
+         // The default is a single bootstrap host. More routers = the DHT
+         // comes up faster and survives one of them being unreachable.
+         settings.set_str(lt::settings_pack::dht_bootstrap_nodes,
+@@ -406,6 +413,16 @@
+     // so that part stays in intorrent_prepare_stream().
+     params.flags |= lt::torrent_flags::sequential_download;
+ 
++    // Pre-warm: the app may add the likely next sources while the person is
++    // still choosing, only to get their metadata (the slowest cold step).
++    // Marked with "x.prewarm=1" in the magnet (parse_magnet_uri ignores
++    // unknown keys). upload_mode = no piece requests, so no bandwidth or
++    // disk is spent; intorrent_prepare_stream() lifts it when the torrent is
++    // actually streamed.
++    if (std::strstr(uri, "x.prewarm=1") != nullptr) {
++        params.flags |= lt::torrent_flags::upload_mode;
++    }
++
+     // Allocate the id first: it names this torrent's private save
+     // directory. g_save_path/<run-token>_<id> can't contain leftovers
+     // from a previous session, so libtorrent never has to spend seconds
+@@ -741,6 +758,9 @@
+         files.num_files(), lt::download_priority_t{0});
+     priorities[file_index] =
+         lt::download_priority_t{static_cast<std::uint8_t>(kStreamPriority)};
++    // A pre-warmed torrent was added in upload_mode (metadata only) - from
++    // here on it is the real stream, so let it download. No-op otherwise.
++    handle.unset_flags(lt::torrent_flags::upload_mode);
+     handle.prioritize_files(priorities);
+ 
+     // Sequential mode is actually enabled back in intorrent_add_magnet()
